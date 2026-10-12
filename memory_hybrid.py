@@ -103,11 +103,12 @@ def hybrid_rank(query: str, docs: Sequence[str], dense_scores: Sequence[float],
     if not docs:
         return []
     n = min(len(docs), len(dense_scores))
-    dense_order = sorted(range(n), key=lambda i: -float(dense_scores[i]))
+    dense_order = [i for i in sorted(range(n), key=lambda i: -float(dense_scores[i]))
+                   if float(dense_scores[i]) >= min_dense]
     bm25 = BM25Index(list(docs)[:n])
     sparse_scores = bm25.scores(query)
-    sparse_ranked = sorted(range(n), key=lambda i: -sparse_scores[i])
-    # 过滤掉 BM25 全 0 的（词面完全不沾边的路不算分）
-    if max(sparse_scores, default=0) <= 0:
-        sparse_ranked = []
+    # 只有 BM25 正分的文档才进稀疏排名——零分文档不拿 RRF 贡献
+    # （否则尾部文档按索引顺序吃无意义底噪，稀释命中项优势）
+    sparse_ranked = [i for i in sorted(range(n), key=lambda i: -sparse_scores[i])
+                    if sparse_scores[i] > 0]
     return rrf_fuse(dense_order, sparse_ranked, top_k)

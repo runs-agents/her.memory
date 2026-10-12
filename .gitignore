@@ -4,3 +4,6 @@ _snapshots/
 _proposals/
 *.lock
 semantic_memories.jsonl
+archived_memories.jsonl
+retrieval_hits.jsonl
+*.corrupt*

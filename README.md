@@ -70,8 +70,10 @@ git clone https://github.com/runs-agents/her.memory.git && cd her.memory
 pip install requests numpy
 ollama pull bge-m3
 
-# write a memory (dedupes against existing entries, appends atomically)
+# write a memory (appends atomically under the file lock)
 python add_semantic.py "User prefers jasmine tea in the evening" --category user_profile
+# optional write-time dedupe gate (needs a project key to key on):
+#   add --project user --dedupe
 
 # backfill embeddings for entries that lack them
 python backfill_embeddings.py
