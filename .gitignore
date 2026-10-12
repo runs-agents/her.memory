@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+_snapshots/
+_proposals/
+*.lock
+semantic_memories.jsonl
