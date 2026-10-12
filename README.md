@@ -1,4 +1,4 @@
-# companion-memory
+# her.memory
 
 **A memory system built for AI companions — not another RAG store.**
 
