@@ -178,7 +178,7 @@ def _stamp_version():
         print(f"⚠ 版本戳刷新失败（不影响落库）: {_e}", file=sys.stderr)
 
 
-def add_semantic(text: str, category: str, event_date: str = None,
+def add_semantic(text: str, category: str, event_date: str = None, mem_type: str = "general",
                  project: str = None, dedupe: bool = False,
                  force: bool = False, supersede: bool = False) -> bool:
     text = (text or "").strip()
@@ -214,7 +214,7 @@ def add_semantic(text: str, category: str, event_date: str = None,
     entry = {
         "id": f"mem_{int(time.time() * 1000)}_{os.getpid()}",
         "text": text,
-        "type": "general",
+        "type": mem_type,
         "category": category,
         "embedding": emb,
         "timestamp": now,
@@ -301,6 +301,9 @@ if __name__ == "__main__":
     # B9 断言9：三模式互斥（互斥判定在函数层 L180-182，CLI 只传参——非 argparse 互斥组）
     parser.add_argument("text", type=str, help="记忆/见解正文")
     parser.add_argument("--category", type=str, required=True, help="分类（对话蒸馏/探索见解等）")
+    parser.add_argument("--type", dest="mem_type", type=str, default="general",
+                        choices=["general", "event", "emotional", "preference"],
+                        help="记忆类型（general/event/emotional/preference，默认 general）")
     parser.add_argument("--date", type=str, default=None, help="事件日期（如 2026-08-17）")
     parser.add_argument("--project", type=str, default=None,
                         help="结构化项目键（owner/repo，落 project_key，规范化小写）")
@@ -313,7 +316,7 @@ if __name__ == "__main__":
                         help="同键旧条目归档链回+新条目写入（换新；时效性事实演进用）")
     args = parser.parse_args()
 
-    ok = add_semantic(args.text, args.category, args.date,
+    ok = add_semantic(args.text, args.category, args.date, mem_type=args.mem_type,
                       project=args.project, dedupe=args.dedupe, force=args.force,
                       supersede=args.supersede)
     sys.exit(0 if ok else 1)
