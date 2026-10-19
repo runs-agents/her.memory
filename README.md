@@ -113,6 +113,10 @@ Optional: `ollama pull qwen2.5:7b` — the consolidation LLM-assist uses it when
 | Embeddings | cloud API | any | **local bge-m3 (offline)** |
 | Retrieval | vector (+filters) | vector | **BM25 + vector RRF fusion** |
 
+## Ecosystem
+
+- [DSH-her.memory](https://github.com/HeyBlack233/DSH-her.memory) — community port to [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (JS/TS plugin). Same atomic-fact store, hybrid retrieval and proposal-based consolidation, exposed as DSH tools + skills with a settings UI. `memoryDir` accepts an existing her.memory directory, so memories carry over.
+
 ## License
 
 MIT. If you build a companion that remembers someone, remember the consent part too — it's the part that makes it a companion.
