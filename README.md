@@ -115,6 +115,7 @@ Optional: `ollama pull qwen2.5:7b` — the consolidation LLM-assist uses it when
 
 ## Ecosystem
 
+- [session-distillation](https://github.com/runs-agents/session-distillation) — the **write side** of this store: a judgment pipeline that decides which parts of a conversation deserve to become permanent — full-text reads (never sampling), an auditable resonance standard, and a code-enforced credential gate. Point its `MEMORY_FILE` at this repo's `SEMANTIC_MEMORIES` and what it distills is what you retrieve here.
 - [DSH-her.memory](https://github.com/HeyBlack233/DSH-her.memory) — community port to [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (JS/TS plugin). Same atomic-fact store, hybrid retrieval and proposal-based consolidation, exposed as DSH tools + skills with a settings UI. `memoryDir` accepts an existing her.memory directory, so memories carry over.
 
 ## License
