@@ -202,7 +202,11 @@ def retrieve_memories(query, top_k=None, include_archived=False):
         from memory_hybrid import hybrid_rank  # type: ignore
         docs = [m.get("text", "") for _, _, _, m in scored]
         dense = [s for s, _, _, _ in scored]
-        fused_order = hybrid_rank(query, docs, dense, len(scored))
+        # 时间路（2026-10-24）：event_date 优先，fallback timestamp；
+        # query 带时间意图时时间倒序路参与 RRF（详见 memory_hybrid.py）
+        dates = [m.get("event_date") or m.get("timestamp") or ""
+                 for _, _, _, m in scored]
+        fused_order = hybrid_rank(query, docs, dense, len(scored), dates=dates)
         scored = [scored[i] for i in fused_order]
     except ImportError:
         scored.sort(key=lambda x: x[0], reverse=True)  # 老路径兜底

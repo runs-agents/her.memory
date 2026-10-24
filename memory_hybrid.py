@@ -19,7 +19,7 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
-from typing import Dict, List, Sequence
+from typing import Dict, List, Optional, Sequence
 
 # RRF 常数（论文默认 60，越大越平滑）
 RRF_K = 60
@@ -84,31 +84,87 @@ class BM25Index:
 def rrf_fuse(dense_ranked: Sequence[int], sparse_ranked: Sequence[int],
              top_k: int, k: int = RRF_K) -> List[int]:
     """Reciprocal Rank Fusion：输入两路已排好的索引列表，输出融合排名。"""
+    return rrf_fuse_multi([dense_ranked, sparse_ranked], top_k, k)
+
+
+def rrf_fuse_multi(ranked_lists: Sequence[Sequence[int]],
+                   top_k: int, k: int = RRF_K) -> List[int]:
+    """多路 RRF（2026-10-24 时间路升级）：任意路数的排名列表融合。
+
+    RRF_score(d) = Σ_i 1/(k + rank_i(d) + 1)。路数增加时各路贡献
+    天然被稀释，不需要重新调参——这是选 RRF 而非分数加权的原因。
+    """
     rrf: Dict[int, float] = {}
-    for rank, idx in enumerate(dense_ranked):
-        rrf[idx] = rrf.get(idx, 0.0) + 1.0 / (k + rank + 1)
-    for rank, idx in enumerate(sparse_ranked):
-        rrf[idx] = rrf.get(idx, 0.0) + 1.0 / (k + rank + 1)
+    for ranked in ranked_lists:
+        for rank, idx in enumerate(ranked):
+            rrf[idx] = rrf.get(idx, 0.0) + 1.0 / (k + rank + 1)
     return sorted(rrf, key=lambda i: -rrf[i])[:top_k]
 
 
+# ── 时间路（2026-10-24）：temporal intent 触发式，平时不激活 ──────────
+# 设计依据：EverMe/Hindsight 的 temporal 检索路，轻量版——
+# query 带时间意图词时，时间倒序路才参与 RRF；普通查询两路不动，
+# 行为零变化（无关近期条目不污染日常召回）。
+_TIME_INTENT_RE = re.compile(
+    r"最近|上次|上回|昨天|前天|今天|今晚|昨晚|上周|上个月|这周|这几天|"
+    r"最新|近况|后来|后续|进展|现在还|还在吗|还记不记得|lately|recent"
+)
+# recency 路参与融合的窗口：只有时间倒序前这么多条拿 RRF 分，
+# 防止全库按时间排队给近期条目无条件加分
+RECENCY_WINDOW = 100
+
+
+def temporal_intent(query: str) -> bool:
+    """query 是否带时间意图（「上次聊的那个」「最近怎么样」类）。"""
+    return bool(_TIME_INTENT_RE.search(query or ""))
+
+
+def _parse_time(s: str) -> float:
+    """event_date('2026-08-15') / timestamp(ISO) → 可比较的 epoch 秒。失败 0。"""
+    if not s:
+        return 0.0
+    from datetime import datetime
+    t = str(s).strip()
+    try:
+        return datetime.fromisoformat(t).timestamp()
+    except ValueError:
+        return 0.0
+
+
+def recency_ranked(dates: Sequence[str], window: int = RECENCY_WINDOW) -> List[int]:
+    """按时间倒序（新→旧）返回索引，截取前 window 条参与 RRF。
+
+    时间解析失败的条目排最后（拿不到 recency 分，但不报错）。
+    """
+    order = sorted(range(len(dates)), key=lambda i: -_parse_time(dates[i]))
+    return order[:window]
+
+
 def hybrid_rank(query: str, docs: Sequence[str], dense_scores: Sequence[float],
-                top_k: int, min_dense: float = 0.0) -> List[int]:
+                top_k: int, min_dense: float = 0.0,
+                dates: Optional[Sequence[str]] = None) -> List[int]:
     """一步到位：给 query、全部文档文本、 dense 相似度分数 → 返回融合后的 top-k 索引。
 
     - dense 路：调用方已算好的余弦相似度，降序排名
     - sparse 路：BM25 分数，降序排名
     - 两路 RRF 融合；dense 全低于 min_dense 时仍走 sparse（兜底）
+    - 时间路（2026-10-24）：dates 给了且 query 带时间意图时，
+      时间倒序前 RECENCY_WINDOW 条作为第三路参与融合。
+      dates 与 docs 索引对齐（event_date 优先，fallback timestamp）。
     """
     if not docs:
         return []
     n = min(len(docs), len(dense_scores))
-    dense_order = [i for i in sorted(range(n), key=lambda i: -float(dense_scores[i]))
-                   if float(dense_scores[i]) >= min_dense]
+    dense_order = sorted(range(n), key=lambda i: -float(dense_scores[i]))
     bm25 = BM25Index(list(docs)[:n])
     sparse_scores = bm25.scores(query)
-    # 只有 BM25 正分的文档才进稀疏排名——零分文档不拿 RRF 贡献
-    # （否则尾部文档按索引顺序吃无意义底噪，稀释命中项优势）
-    sparse_ranked = [i for i in sorted(range(n), key=lambda i: -sparse_scores[i])
-                    if sparse_scores[i] > 0]
-    return rrf_fuse(dense_order, sparse_ranked, top_k)
+    sparse_ranked = sorted(range(n), key=lambda i: -sparse_scores[i])
+    # 过滤掉 BM25 全 0 的（词面完全不沾边的路不算分）
+    if max(sparse_scores, default=0) <= 0:
+        sparse_ranked = []
+    lists = [dense_order, sparse_ranked]
+    if dates and temporal_intent(query):
+        rec = recency_ranked([str(d) for d in list(dates)[:n]])
+        if rec:
+            lists.append(rec)
+    return rrf_fuse_multi(lists, top_k)
